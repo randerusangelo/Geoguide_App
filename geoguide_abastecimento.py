@@ -96,8 +96,12 @@ if st.button("Consultar Dados"):
             
             elif fonte_dados == "Estoque":
                 query = '''
-                SELECT deposito, "data", quantidade
-                FROM usa.estoque
+                SELECT A.data, A.deposito, 
+                       B.equipe, B.descricao, B.frota,
+                       A.quantidade
+                FROM usa.estoque AS A
+                LEFT JOIN usa.equipe_abastecimento AS B
+                     ON A.deposito = B.deposito
                 WHERE material = %s
                     AND "data" BETWEEN %s AND %s
                 ORDER BY "data" DESC
