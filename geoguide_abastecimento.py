@@ -116,7 +116,7 @@ if st.button("Consultar Dados"):
                 st.success(f"{len(df)} registros encontrados.")
                 st.dataframe(df)
 
-                if "quantidade" in df.columns:
+                if fonte_dados == "Abastecimento" and "quantidade" in df.columns:
                     try:
                         total_quant = pd.to_numeric(df["quantidade"], errors="coerce").sum()
                         st.markdown(f"""
