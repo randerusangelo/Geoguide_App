@@ -41,7 +41,11 @@ with st.sidebar:
 
     if fonte_dados == "Abastecimento":
         comboio = st.text_input("Comboio (Opcional)", value=st.session_state["comboio"])
+
         bomba = st.text_input("Bomba (Opcional)", value=st.session_state["bomba"])
+        bomba = bomba.upper()
+        st.session_state["bomba"] = bomba
+
         codigo_material = None
 
     if fonte_dados == "Estoque":
@@ -53,9 +57,6 @@ with st.sidebar:
         }
         material_selecionado = st.selectbox("Material", options=list(opcoes_material.keys()))
         codigo_material = opcoes_material[material_selecionado]
-
-
-        
 
     if st.button("Salvar Filtros"):
         st.session_state["data_ini"] = data_ini
@@ -74,7 +75,7 @@ if st.button("Consultar Dados"):
             if fonte_dados == "Abastecimento":
 
                 query = """
-                    SELECT data, hora, frota, quantidade, motorista,
+                    SELECT instante, frota, quantidade, motorista,
                         frentista, odometro, horimetro,
                         encerrante, bomba, comboio,qt_arla,
                             integrado, log_integracao
@@ -108,17 +109,29 @@ if st.button("Consultar Dados"):
             '''
                 params = [codigo_material, data_ini, data_fim]
 
-
             df = pd.read_sql(query, conn, params=params)
             conn.close()
 
-            df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
+            if fonte_dados == "Abastecimento" and "instante" in df.columns:
+                df["instante"] = pd.to_datetime(df["instante"], errors="coerce")
+
+            if fonte_dados == "Estoque":
+                df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
 
             if df.empty:
                 st.warning("Nenhum registro encontrado.")
             else:
                 st.success(f"{len(df)} registros encontrados.")
-                st.dataframe(df)
+                st.dataframe(
+                    df,
+                    column_config={
+                        "instante": st.column_config.DatetimeColumn(
+                            "instante", format="DD/MM/YYYY HH:mm:ss"
+                        ),
+                        
+                    },
+                    use_container_width=True,    
+                )
 
                 if fonte_dados == "Abastecimento" and "quantidade" in df.columns:
                     try:
@@ -133,14 +146,37 @@ if st.button("Consultar Dados"):
 
                 with st.expander("📥 Exportar para Excel"):
                     output = io.BytesIO()
+
+                    if fonte_dados == "Abastecimento":
+                        sheet_name = "Abastecimentos"
+                        file_stub = "abastecimentos"
+                    
+                    else:
+                        sheet_name = f"Estoque - {material_selecionado}"
+                        file_stub = f"estoque_{material_selecionado.lower()}"
+
+                    file_name = f"{file_stub}_{data_ini.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}.xlsx"
+
                     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                        df.to_excel(writer, index=False, sheet_name="Abastecimentos")
+                        df.to_excel(writer, index=False, sheet_name=sheet_name)
+                        ws = writer.sheets[sheet_name]
+                        
+                        def apply_number_format(col_name, fmt):
+                            if col_name in df.columns:
+                                cidx = df.columns.get_loc(col_name) + 1
+                                for r in range(2, len(df) + 2):
+                                    ws.cell(row=r, column=cidx).number_format = fmt
+
+                        apply_number_format("instante", "dd/mm/yyyy hh:mm:ss")
+
+                       
+
                     output.seek(0)
 
                     st.download_button(
                         label="📤 Baixar .xlsx",
                         data=output,
-                        file_name="abastecimentos.xlsx",
+                        file_name=file_name,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
         except Exception as e:
